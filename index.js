@@ -1,68 +1,95 @@
 /**
  * @author monkindey
- * @decription simple arguments validator and inspired by the awesome aproba
- * @usage
- * *
- * A
- * S
- * N
- * F
- * O
- * B
- * E
- * Z
+ * @decription Simple arguments validator
  */
 
 function typeOf(target) {
 	return {}.toString.call(target).match(/\[object\s+(\w+)\]/)[1];
 }
 
-function argv(types) {
+function findSuitable(schema, args) {
+	return schema.filter(function(s) {
+		return s.length === args.length;
+	});
+}
+
+function englisify(arr) {
+	if (arr.length === 1) {
+		return arr.toString();
+	}
+	var pre = arr.slice(0, -1);
+	return pre.join(', ') + ' or ' + arr.slice(-1);
+}
+
+function argv(raw) {
 	var typeMap = {
-		A: "Array",
-		S: "String",
-		N: "Number",
-		F: "Function",
-		O: "Object",
-		B: "Boolean",
-		E: "Error",
-		Z: "Null"
+		A: 'Array',
+		S: 'String',
+		N: 'Number',
+		F: 'Function',
+		O: 'Object',
+		B: 'Boolean',
+		E: 'Error',
+		Z: 'Null'
 	};
 
 	return function(fn) {
 		return function() {
 			var args = arguments;
-			var wrongIndex;
+			var wrongIndex = 0;
+			var schema = raw.split('|');
+			var suitableSchema = findSuitable(schema, args);
 
-			if (types.length < args.length) {
-				return new Error("too many arguments error");
-			}
-
-			if (types.length > args.length) {
-				return new Error("missing arguments error");
-			}
-
-			if (
-				types.split("").every(function(type, i) {
-					var verified = typeOf(args[i]) === typeMap[type];
-					if (!verified) {
-						wrongIndex = i;
-					}
-					return verified;
-				})
-			) {
-				// OK
-				fn.apply(this, args);
-			} else {
-				return new Error(
-					"Argument #" +
-						(wrongIndex + 1) +
-						": Expected " +
-						typeMap[types[wrongIndex]] +
-						" but got " +
-						typeOf(args[wrongIndex])
+			// not match
+			if (suitableSchema.length === 0) {
+				// check the arguments length
+				throw new Error(
+					'Excepted ' +
+						englisify(
+							schema
+								.map(function(s) {
+									return s.length;
+								})
+								.filter(function(s, i, ss) {
+									return ss.indexOf(s) === i;
+								})
+						) +
+						' argument but got ' +
+						args.length
 				);
 			}
+
+			(function check(schema) {
+				var filteredSchema = schema.filter(function(s) {
+					return typeOf(args[wrongIndex]) === typeMap[s[wrongIndex]];
+				});
+
+				// 验证没问题就退出这个循环
+				if (wrongIndex > suitableSchema.length) {
+					return true;
+				}
+
+				if (filteredSchema.length === 0) {
+					throw new Error(
+						'Argument #' +
+							(wrongIndex + 1) +
+							': Expected ' +
+							englisify(
+								schema.map(function(s) {
+									return typeMap[s[wrongIndex]];
+								})
+							) +
+							' but got ' +
+							typeOf(args[wrongIndex])
+					);
+				}
+
+				wrongIndex++;
+
+				return check(filteredSchema);
+			})(suitableSchema);
+
+			fn.apply(this, args);
 		};
 	};
 }
